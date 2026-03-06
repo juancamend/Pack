@@ -6,7 +6,7 @@ I write a lot of PRDs. I built this to spend less time on structure and more tim
 
 ```bash
 # Clone the repo
-git clone <your-repo-url>
+git clone https://github.com/juancamend/Pack
 cd prd-cli
 
 # Install dependencies
