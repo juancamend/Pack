@@ -10,7 +10,7 @@ git clone https://github.com/juancamend/Pack
 cd prd-cli
 
 # Install dependencies
-pip install anthropic
+pip install -r requirements.txt
 
 # Set your API key
 export ANTHROPIC_API_KEY="your-api-key"

@@ -108,7 +108,7 @@ def generate_prd(inputs: dict) -> str:
     client = anthropic.Anthropic()
     
     message = client.messages.create(
-        model="claude-opus-4-5-20250129",
+        model="claude-opus-4-6",
         max_tokens=1500,
         system=build_system_prompt(),
         messages=[
