@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""
+PRD Drafting CLI
+
+A command line tool that generates structured PRD drafts from minimal input.
+Uses the Anthropic API to expand raw inputs into professional PRD prose.
+
+Requirements:
+    pip install anthropic
+
+Usage:
+    export ANTHROPIC_API_KEY="your-api-key"
+    python prd.py
+
+The tool will prompt for product details and generate a markdown PRD
+in the ./output/ directory.
+"""
+
+import os
+import re
+import sys
+from datetime import date
+
+try:
+    import anthropic
+except ImportError:
+    print("Missing dependency: anthropic")
+    print("Install with: pip install anthropic")
+    sys.exit(1)
+
+
+def slugify(text: str) -> str:
+    """Convert text to URL-friendly slug."""
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_-]+", "-", text)
+    text = text.strip("-")
+    return text
+
+
+def get_input(prompt: str) -> str:
+    """Get non-empty input from user."""
+    while True:
+        value = input(prompt).strip()
+        if value:
+            return value
+        print("  This field is required. Please enter a value.")
+
+
+def build_system_prompt() -> str:
+    """Return the system prompt for PRD generation."""
+    return """You are a senior product manager helping draft a structured PRD.
+
+Your job is to take the user's raw inputs and expand them into clear, professional prose. Follow these rules:
+
+1. Expand the user's input into complete sentences and paragraphs. Do not simply repeat what they wrote.
+2. Do not invent specific features, technical implementation details, or solutions. Stay at the strategic level.
+3. Generate non-goals that a thoughtful PM would actually raise given the problem and constraints. These should be plausible scope cuts or adjacent problems that could cause confusion.
+4. Generate open questions that need real answers before building. These should be specific to the product, not generic PM questions.
+5. For success metrics, include both leading indicators (early signals) and lagging indicators (outcome measures) where relevant.
+6. Write in direct, professional prose. No filler. No corporate jargon.
+
+Output ONLY the markdown content. No preamble, no explanation, no commentary."""
+
+
+def build_user_prompt(inputs: dict) -> str:
+    """Build the user prompt from collected inputs."""
+    today = date.today().strftime("%B %d, %Y")
+    
+    return f"""Generate a PRD with the following structure. Use the inputs provided to fill each section.
+
+Inputs:
+- Product name: {inputs['product_name']}
+- Problem statement: {inputs['problem_statement']}
+- Target user: {inputs['target_user']}
+- Key constraints: {inputs['constraints']}
+- Primary success metric: {inputs['success_metric']}
+
+Output this exact structure:
+
+# PRD: {inputs['product_name']}
+*Generated {today} — review and edit before sharing*
+
+## Problem
+[Expand the problem statement into 2-3 sentences. Add context about why this matters.]
+
+## Target User
+[Describe who this is for and what they care about. Be specific.]
+
+## Goals
+[3-5 measurable goals derived from the success metric. Each should be concrete.]
+
+## Non-Goals
+[2-3 things this explicitly does not solve. Infer these from the constraints and problem scope.]
+
+## Proposed Approach
+[High-level direction based on the problem. No implementation specifics. 2-3 paragraphs max.]
+
+## Open Questions
+[3-5 questions a PM should answer before building. These should be specific to this product, not generic.]
+
+## Success Metrics
+[Expand the primary metric. Include leading and lagging indicators where relevant.]"""
+
+
+def generate_prd(inputs: dict) -> str:
+    """Call the Anthropic API to generate the PRD."""
+    client = anthropic.Anthropic()
+    
+    message = client.messages.create(
+        model="claude-opus-4-5-20250129",
+        max_tokens=1500,
+        system=build_system_prompt(),
+        messages=[
+            {"role": "user", "content": build_user_prompt(inputs)}
+        ]
+    )
+    
+    return message.content[0].text
+
+
+def main():
+    # Check for API key
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("ANTHROPIC_API_KEY not set. Add it to your environment and try again.")
+        sys.exit(1)
+    
+    print()
+    
+    # Collect inputs
+    inputs = {
+        "product_name": get_input("Product name: "),
+        "problem_statement": get_input("Problem statement (1-2 sentences): "),
+        "target_user": get_input("Target user: "),
+        "constraints": get_input("Key constraints (technical, time, scope): "),
+        "success_metric": get_input("Primary success metric: "),
+    }
+    
+    print()
+    print("Generating your PRD draft...")
+    print()
+    
+    # Generate PRD
+    try:
+        prd_content = generate_prd(inputs)
+    except anthropic.APIError as e:
+        print(f"API error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error generating PRD: {e}")
+        sys.exit(1)
+    
+    # Create output directory
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Build filename
+    slug = slugify(inputs["product_name"])
+    today = date.today().strftime("%Y-%m-%d")
+    filename = f"prd-{slug}-{today}.md"
+    filepath = os.path.join(output_dir, filename)
+    
+    # Write file
+    with open(filepath, "w") as f:
+        f.write(prd_content)
+    
+    print(f"Done. Saved to {filepath}")
+    print()
+
+
+if __name__ == "__main__":
+    main()
